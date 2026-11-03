@@ -1,0 +1,31 @@
+import React from "react";
+import type { FormEvent } from "react";
+import { createRoot } from "react-dom/client";
+import { AuthApi, BrowserTransport, HttpApi, IndexedDbStorage, browserTimers, type Session } from "@unicomms/adapter-web";
+import { UniCommsClient, createDefaultPlugins, type Conversation } from "@unicomms/core";
+import { ChatPanel } from "@unicomms/react-ui";
+import "./style.css";
+
+const API = import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8080";
+const AUTH = new AuthApi(API);
+function App() {
+  const [session, setSession] = React.useState<Session | null>(() => { try { const raw = sessionStorage.getItem("unicomms.session"); return raw ? JSON.parse(raw) as Session : null; } catch { return null; } });
+  const [client, setClient] = React.useState<UniCommsClient | null>(null); const [conversations, setConversations] = React.useState<Conversation[]>([]); const [users, setUsers] = React.useState<Session["user"][]>([]); const [error, setError] = React.useState(""); const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    if (!session) return;
+    let cancelled = false;
+    const next = new UniCommsClient({ user: session.user, token: session.token, websocketUrl: API.replace(/^http/, "ws") + "/ws", api: new HttpApi(API, () => session.token), transport: new BrowserTransport(), storage: new IndexedDbStorage(`${session.user.tenant}:${session.user.id}`), timers: browserTimers, plugins: createDefaultPlugins() });
+    setClient(next); void next.connect().catch(e => setError(e instanceof Error ? e.message : "Connection failed"));
+    void Promise.all([AUTH.users(session.token), new HttpApi(API, () => session.token).conversations()]).then(([known, chats]) => { if (!cancelled) { setUsers(known.filter(item => item.id !== session.user.id)); setConversations(chats); } }).catch(e => setError(e instanceof Error ? e.message : "Could not load account data"));
+    return () => { cancelled = true; void next.close(); };
+  }, [session]);
+  async function authenticate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); setBusy(true); setError(""); const data = new FormData(event.currentTarget); const tenant = String(data.get("tenant")); const username = String(data.get("username")); const password = String(data.get("password")); const displayName = String(data.get("displayName"));
+    try { const value = data.get("mode") === "register" ? await AUTH.register(tenant, username, password, displayName) : await AUTH.login(tenant, username, password); sessionStorage.setItem("unicomms.session", JSON.stringify(value)); setSession(value); }
+    catch(e) { setError(e instanceof Error ? e.message : "Authentication failed"); } finally { setBusy(false); }
+  }
+  async function newConversation() { if (!session || users.length === 0) return setError("Register a second account in this tenant before creating a conversation."); const member = users[0]; if (!member) return; try { const item = await AUTH.createConversation(session.token, `${session.user.displayName} & ${member.displayName}`, [member.id]); setConversations(value => [item, ...value]); } catch(e) { setError(e instanceof Error ? e.message : "Could not create conversation"); } }
+  if (!session || !client) return <div className="auth-page"><div className="auth-card"><div className="uc-brand"><span className="uc-mark">U</span><div><strong>UniComms</strong><small>Open messaging SDK</small></div></div><p className="eyebrow">REFERENCE IMPLEMENTATION</p><h1>Messaging built for<br/>more than one platform.</h1><p className="auth-subtitle">A portable protocol core with platform adapters for Web and React Native.</p><form onSubmit={authenticate}><label>Tenant<input name="tenant" defaultValue="demo" required minLength={1} maxLength={64}/></label><label>Username<input name="username" required minLength={1} maxLength={64}/></label><label>Password<input name="password" type="password" required minLength={10} maxLength={72} placeholder="At least 10 characters"/></label><label>Display name <small>(registration only)</small><input name="displayName" defaultValue="Demo User" required maxLength={80}/></label><div className="auth-actions"><select name="mode" aria-label="Authentication mode"><option value="login">Sign in</option><option value="register">Create account</option></select><button disabled={busy}>{busy ? "Working…" : "Continue →"}</button></div>{error && <p className="error-message" role="alert">{error}</p>}</form><p className="auth-footnote">Local demo only · registration is enabled in the local Spring profile.</p></div><div className="auth-aside"><div className="orbit orbit-a"/><div className="orbit orbit-b"/><div className="float-card card-one">↗ <span>WebSocket<br/><small>reliable delivery</small></span></div><div className="float-card card-two">◈ <span>SDK Core<br/><small>platform-neutral</small></span></div><div className="aside-caption"><span>01 / 03</span><p>One protocol.<br/><strong>Purpose-built UI per platform.</strong></p></div></div></div>;
+  return <div className="workspace"><header className="topbar"><div className="uc-brand"><span className="uc-mark">U</span><strong>UniComms</strong><span className="topbar-sep">/</span><span className="topbar-caption">SDK playground</span></div><div className="topbar-right"><span className="user-chip"><i>{session.user.displayName.slice(0,1).toUpperCase()}</i>{session.user.displayName}</span><button className="quiet-button" onClick={() => { sessionStorage.removeItem("unicomms.session"); setClient(null); setSession(null); }}>Sign out</button></div></header><div className="workspace-content"><div className="workspace-heading"><div><p className="eyebrow">REALTIME MESSAGING · REFERENCE APP</p><h1>Good conversations,<br/><span>reliable foundations.</span></h1></div><button className="new-chat" onClick={() => void newConversation()}>＋ New conversation</button></div>{error && <p className="inline-error" role="alert">{error}</p>}<ChatPanel client={client} conversations={conversations} currentUserId={session.user.id}/><footer className="workspace-footer"><span>CORE · ADAPTER · UI</span><span>Local dev environment&nbsp; <i/></span></footer></div></div>;
+}
+createRoot(document.getElementById("root")!).render(<React.StrictMode><App/></React.StrictMode>);

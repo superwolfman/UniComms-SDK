@@ -1,0 +1,5 @@
+{
+  "name":"unicomms-sdk-workspace","version":"0.1.0","private":true,"packageManager":"pnpm@10.21.0",
+  "scripts":{"dev":"pnpm --filter @unicomms/web dev","build:packages":"pnpm --filter @unicomms/core build && pnpm --filter @unicomms/adapter-web build && pnpm --filter @unicomms/adapter-native build && pnpm --filter @unicomms/react-ui build","build":"pnpm build:packages && pnpm --filter @unicomms/web build","typecheck":"pnpm build:packages && pnpm -r typecheck","test":"pnpm --filter @unicomms/core build && pnpm --filter @unicomms/core test"},
+  "devDependencies":{"typescript":"~5.9.3","@types/react":"~19.2.2","@types/react-dom":"~19.2.2"}
+}

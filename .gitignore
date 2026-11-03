@@ -1,0 +1,13 @@
+node_modules/
+**/node_modules/
+**/dist/
+**/*.tsbuildinfo
+.cache/
+.env
+.env.local
+.DS_Store
+
+# tsc 编译产物（不应进入源码目录）
+apps/web/src/*.js
+apps/web/src/*.d.ts
+apps/web/src/*.js.map
